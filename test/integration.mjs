@@ -111,6 +111,36 @@ async function testGithub() {
     rangedBody.length === 50 && declared > 50,
     `${rangedBody.length} bytes, resource=${declared}`);
 
+  // Regression: open-ended ranges. Fastly declares the gzipped total, so a
+  // naive proxy returns (compressedTotal - start) bytes instead of the tail
+  // of the real file. A download resumed in two halves must reconstruct the
+  // original exactly.
+  const total = declared;
+  const half = Math.floor(total / 2);
+  const part1 = await call(
+    ghGet,
+    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
+    { headers: { range: `bytes=0-${half - 1}` } }
+  );
+  const part2 = await call(
+    ghGet,
+    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
+    { headers: { range: `bytes=${half}-` } }
+  );
+  const joined =
+    (await part1.text()) + (await part2.text());
+  ok("resume halves concatenate to the whole file",
+    joined === rawBody,
+    `${joined.length} vs ${rawBody.length} bytes`);
+
+  // Out-of-range must be 416, not a truncated 206.
+  const past = await call(
+    ghGet,
+    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
+    { headers: { range: `bytes=${total + 100}-` } }
+  );
+  ok("range past EOF → 416", past.status === 416, `status=${past.status}`);
+
   // Release asset — follows GitHub's redirect to release-assets host.
   const asset = await call(
     ghGet,

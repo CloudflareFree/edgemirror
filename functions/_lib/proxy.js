@@ -200,6 +200,14 @@ export async function forward(request, targetUrl, opts = {}) {
     outHeaders["cache-control"] = cacheControl;
   }
 
+  // A 206 body must reach the client byte-for-byte. Cloudflare's edge
+  // auto-compresses text responses that lack a Content-Encoding, which
+  // silently shrinks a 100-byte range down to ~60 and breaks every
+  // resumable download. `no-transform` is the standard way to forbid it.
+  if (wantsRange && !/no-transform/i.test(outHeaders["cache-control"])) {
+    outHeaders["cache-control"] += ", no-transform";
+  }
+
   if (upstream.status >= 300 && upstream.status < 400) {
     const loc = upstream.headers.get("location");
     if (loc) outHeaders["location"] = loc;
@@ -208,10 +216,126 @@ export async function forward(request, targetUrl, opts = {}) {
   const noBody =
     method === "HEAD" || upstream.status === 204 || upstream.status === 304;
 
+  // --- ranged responses over compressible text -----------------------------
+  //
+  // github.com sits behind Fastly, which computes ranges over the *gzipped*
+  // representation: it reports the compressed size as the resource total and
+  // ships decoded bytes with no Content-Encoding. A `bytes=0-99` request
+  // returns ~63 plaintext bytes while claiming `0-99/330` for a file that is
+  // really 496 bytes. Every ranged read of a compressible file is wrong,
+  // and open-ended ranges (`248-`) come back short too.
+  //
+  // No header-level tell is reliable — content-length is present for some
+  // ranges and absent for others — so for any ranged 206 whose declared
+  // total is small enough to re-fetch, we discard the upstream slice and
+  // serve from a full fetch we slice ourselves. Big resources (large binary
+  // release assets, which Fastly handles correctly) stay on the streaming
+  // path untouched.
+  if (wantsRange && !noBody && upstream.status === 206) {
+    const declaredTotal = totalFromContentRange(
+      upstream.headers.get("content-range")
+    );
+
+    if (declaredTotal !== null && declaredTotal <= MAX_REPAIR_BYTES) {
+      // Drain the rejected slice so the connection can be reused.
+      if (upstream.body) await upstream.body.cancel();
+      return await serveRangeFromFull(
+        request,
+        fetchUrl,
+        headers,
+        request.headers.get("range") || "",
+        outHeaders,
+        declaredTotal
+      );
+    }
+  }
+
   return new Response(noBody ? null : upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: outHeaders,
+  });
+}
+
+/** Upper bound for the in-memory range repair path. */
+const MAX_REPAIR_BYTES = 8 * 1024 * 1024;
+
+/** Total resource size declared in `Content-Range: bytes a-b/total`. */
+function totalFromContentRange(value) {
+  if (!value) return null;
+  const m = /\/\s*(\d+)\s*$/.exec(value);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Fetch the whole resource and satisfy the range locally. Only reached when
+ * the upstream's 206 looks like Fastly's compressed-range bug.
+ */
+async function serveRangeFromFull(
+  request,
+  fetchUrl,
+  baseHeaders,
+  rangeHeader,
+  outHeaders,
+  knownTotal
+) {
+  const fullHeaders = new Headers(baseHeaders);
+  fullHeaders.delete("range");
+  fullHeaders.delete("if-range");
+
+  let full;
+  try {
+    full = await fetch(fetchUrl, { method: "GET", headers: fullHeaders });
+  } catch {
+    return json(
+      {
+        ok: false,
+        error: "range_fallback_failed",
+        message: "上游未能提供有效的分段响应，且回退获取失败。",
+      },
+      { status: 502 }
+    );
+  }
+
+  if (!full.ok) {
+    // Pass the upstream error straight through rather than inventing one.
+    return new Response(full.body, {
+      status: full.status,
+      headers: { ...cleanResponseHeaders(full.headers), ...CORS },
+    });
+  }
+
+  const buf = await full.arrayBuffer();
+  // Prefer the real byte length; the declared total is used only to detect
+  // the 206 we are replacing.
+  const total = buf.byteLength || knownTotal || 0;
+  if (total === 0) {
+    return new Response(null, { status: 502, headers: outHeaders });
+  }
+  const m = /bytes=(\d*)-(\d*)/.exec(rangeHeader);
+  const start = m[1] === "" ? Math.max(total - Number(m[2]), 0) : Number(m[1]);
+  const end = m[1] !== "" && m[2] !== "" ? Math.min(Number(m[2]), total - 1) : total - 1;
+
+  if (start >= total || start > end) {
+    return new Response(null, {
+      status: 416,
+      headers: {
+        ...outHeaders,
+        "content-range": `bytes */${total}`,
+        "cache-control": "no-store",
+      },
+    });
+  }
+
+  const slice = buf.slice(start, end + 1);
+  return new Response(request.method === "HEAD" ? null : slice, {
+    status: 206,
+    headers: {
+      ...outHeaders,
+      "content-range": `bytes ${start}-${end}/${total}`,
+      "content-length": String(slice.byteLength),
+      "accept-ranges": "bytes",
+    },
   });
 }
 

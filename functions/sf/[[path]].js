@@ -70,7 +70,6 @@ export async function onRequestGet(ctx) {
   return forward(ctx.request, parsed.url, {
     node: null,
     redirect: "follow",
-    extraHeaders: { "accept-encoding": "identity" },
   });
 }
 

@@ -141,19 +141,43 @@ export async function forward(request, targetUrl, opts = {}) {
   const fetchUrl = node ? resolveTarget(node, targetUrl) : targetUrl;
   const method = request.method === "HEAD" ? "HEAD" : "GET";
   const headers = buildUpstreamHeaders(request, extraHeaders);
-  headers.delete("accept-encoding"); // let the runtime pick; we stream raw bytes
+
+  // A ranged response must never be content-encoded: the byte offsets in
+  // Content-Range refer to the *uncompressed* resource, so letting the
+  // runtime ask for gzip yields a truncated, corrupt body. Download clients
+  // and aria2 rely on this being right.
+  const wantsRange = Boolean(request.headers.get("range"));
+  if (wantsRange) {
+    headers.set("accept-encoding", "identity");
+  } else if (!headers.has("accept-encoding")) {
+    headers.delete("accept-encoding"); // let the runtime negotiate normally
+  }
 
   const started = Date.now();
   let upstream;
-  try {
-    upstream = await fetch(fetchUrl, { method, headers, redirect });
-  } catch (err) {
+  let lastErr;
+  // One retry: long-haul routes to github.com occasionally drop the initial
+  // connection, and a bare failure here looks like an outage to the user.
+  //
+  // No AbortSignal here on purpose. A signal stays attached to the body, so a
+  // timeout would kill a legitimately long download mid-stream. A failed
+  // fetch rejects while connecting, which is exactly the case we retry.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      upstream = await fetch(fetchUrl, { method, headers, redirect });
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  if (!upstream) {
     return json(
       {
         ok: false,
         error: "upstream_unreachable",
         message: "上游节点连接失败，请尝试切换节点后重试。",
-        detail: String((err && err.message) || err),
+        detail: String((lastErr && lastErr.message) || lastErr),
         node: node ? node.id : "direct",
       },
       { status: 502 }

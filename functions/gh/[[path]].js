@@ -73,7 +73,6 @@ export async function onRequestGet(ctx) {
   return forward(ctx.request, target.toString(), {
     node,
     cacheControl: cachePolicyFor(url.pathname),
-    extraHeaders: { "accept-encoding": "identity" },
   });
 }
 

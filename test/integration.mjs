@@ -100,6 +100,16 @@ async function testGithub() {
   ok("Content-Range exposed",
     Boolean(ranged.headers.get("content-range")),
     ranged.headers.get("content-range"));
+  // Regression: a ranged response must be identity-encoded. If gzip slips in,
+  // the body is shorter than Content-Range promises and downloads corrupt.
+  ok("Range body is not content-encoded",
+    !ranged.headers.get("content-encoding"),
+    ranged.headers.get("content-encoding") || "identity");
+  const cr = ranged.headers.get("content-range") || "";
+  const declared = Number((cr.match(/bytes \d+-\d+\/(\d+)/) || [])[1] || 0);
+  ok("Range body length matches the slice, not a compressed size",
+    rangedBody.length === 50 && declared > 50,
+    `${rangedBody.length} bytes, resource=${declared}`);
 
   // Release asset — follows GitHub's redirect to release-assets host.
   const asset = await call(

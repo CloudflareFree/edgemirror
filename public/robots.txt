@@ -1,0 +1,10 @@
+# EdgeMirror — https://mirror.137101.xyz
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Ad / tracker crawlers have no use here.
+User-agent: Mediapartners-Google
+Allow: /
+
+Sitemap: https://mirror.137101.xyz/sitemap.xml

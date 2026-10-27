@@ -1,0 +1,16 @@
+{
+  "name": "edgemirror",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GitHub / Docker / SourceForge 加速网关，部署于 Cloudflare 边缘网络",
+  "scripts": {
+    "dev": "wrangler pages dev public",
+    "deploy": "wrangler pages deploy public --project-name=edgemirror",
+    "test": "node test/integration.mjs",
+    "test:e2e": "node test/e2e.mjs",
+    "test:all": "node test/integration.mjs && node test/e2e.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.154.0"
+  }
+}

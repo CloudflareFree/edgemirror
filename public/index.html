@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="zh-CN" prefix="og: https://ogp.me/ns#">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>EdgeMirror — GitHub / Docker / SourceForge 全球加速网关</title>
+    <meta
+      name="description"
+      content="EdgeMirror 是基于 Cloudflare 边缘网络的 GitHub 加速下载代理，同时支持 Docker 镜像加速与 SourceForge 下载加速。Release 资产、Raw 原文、Archive 源码包、Gist 一键转发，支持 Range 断点续传，免配置即开即用。"
+    />
+    <meta
+      name="keywords"
+      content="GitHub加速,GitHub下载加速,GitHub代理,gh-proxy,Docker镜像加速,Docker Hub镜像,SourceForge加速,Cloudflare Workers,边缘加速,开源镜像站"
+    />
+    <meta name="author" content="EdgeMirror" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <meta name="theme-color" content="#070b14" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="canonical" href="https://mirror.137101.xyz/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="EdgeMirror" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:url" content="https://mirror.137101.xyz/" />
+    <meta property="og:title" content="EdgeMirror — GitHub / Docker / SourceForge 全球加速网关" />
+    <meta
+      property="og:description"
+      content="基于 Cloudflare 边缘网络的代码分发加速网关。GitHub Release、Raw、Archive、Gist 与 Docker 镜像、SourceForge 文件一站式加速，支持断点续传。"
+    />
+    <meta property="og:image" content="https://mirror.137101.xyz/assets/og.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="EdgeMirror — GitHub / Docker / SourceForge 全球加速网关" />
+    <meta
+      name="twitter:description"
+      content="基于 Cloudflare 边缘网络的代码分发加速网关，GitHub / Docker / SourceForge 一站式加速。"
+    />
+    <meta name="twitter:image" content="https://mirror.137101.xyz/assets/og.svg" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="alternate" hreflang="zh-CN" href="https://mirror.137101.xyz/" />
+    <link rel="alternate" hreflang="x-default" href="https://mirror.137101.xyz/" />
+
+    <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/assets/app.css" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://mirror.137101.xyz/#website",
+            "url": "https://mirror.137101.xyz/",
+            "name": "EdgeMirror",
+            "description": "GitHub / Docker / SourceForge 全球加速网关",
+            "inLanguage": "zh-CN",
+            "publisher": { "@id": "https://mirror.137101.xyz/#org" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://mirror.137101.xyz/#org",
+            "name": "EdgeMirror",
+            "url": "https://mirror.137101.xyz/",
+            "logo": "https://mirror.137101.xyz/assets/og.svg",
+            "sameAs": ["https://github.com/CloudflareFree/edgemirror"]
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "EdgeMirror",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "Any",
+            "url": "https://mirror.137101.xyz/",
+            "description": "GitHub、Docker Hub 与 SourceForge 的流式加速代理，部署于 Cloudflare 边缘网络。",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "CNY"
+            },
+            "featureList": [
+              "GitHub Release / Raw / Archive / Gist 加速",
+              "Docker Hub 镜像加速",
+              "SourceForge 下载加速",
+              "Range 断点续传",
+              "多节点自动切换"
+            ]
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "EdgeMirror 是否免费？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "完全免费，无流量限制、无需注册。项目部署于 Cloudflare 边缘网络，静态资源请求不计费。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "支持哪些 GitHub 资源类型？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "支持 Releases 资产包、raw.githubusercontent.com 原始文件、archive 源码归档（zip/tar.gz）、codeload 归档、Gist 以及 GitHub REST API 请求。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Docker 镜像加速怎么配置？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "在 Docker 的 daemon.json 中添加 registry-mirrors 指向 https://mirror.137101.xyz，然后重启 Docker 服务，即可直接 docker pull 官方镜像。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "加速链接支持断点续传吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "支持。代理会原样转发 Range 请求头，因此 aria2、IDM、curl -C 等支持断点续传的工具均可正常工作。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "节点挂了怎么办？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "站点提供多个加速节点，界面上的状态灯会实时探测各节点可用性。若某条线路异常，可在输入框下方切换到其他节点，或等待健康检查自动标记。"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <header class="nav">
+      <a class="brand" href="/" aria-label="EdgeMirror 首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M5 21h14" />
+          </svg>
+        </span>
+        <span>EdgeMirror</span>
+        <span class="brand-tag">v1.0</span>
+      </a>
+
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#services">加速服务</a>
+        <a href="#nodes">节点状态</a>
+        <a href="#usage">使用方式</a>
+        <a href="#faq">常见问题</a>
+      </nav>
+
+      <div class="nav-status" id="nav-status" data-state="checking" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="nav-status-text">检测中</span>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ================= HERO ================= -->
+      <div class="hero wrap">
+        <div class="hero-badge">
+          <strong>NEW</strong>
+          <span>边缘直连已上线 · 无需第三方中转</span>
+        </div>
+
+        <h1>
+          为开发者打造的<br />
+          <span class="grad">全球代码分发加速网关</span>
+        </h1>
+
+        <p class="hero-sub">
+          Releases、Raw 原文、Archive 源码包、Git Clone 与 Docker 镜像的毫秒级智能调度代理。
+          部署于 Cloudflare 全球边缘网络，支持 Range 断点续传，免配置即开即用。
+        </p>
+
+        <!-- ---------- console ---------- -->
+        <div class="console">
+          <div class="console-bar">
+            <span class="console-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="console-title">edgemirror — shell</span>
+          </div>
+
+          <div class="console-tabs" role="tablist" aria-label="加速服务类型">
+            <button
+              class="tab"
+              role="tab"
+              id="tab-github"
+              aria-controls="panel"
+              aria-selected="true"
+              data-service="github"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.9 18.3 5.2 18.3 5.2c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .4.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5Z" />
+              </svg>
+              GitHub
+            </button>
+            <button
+              class="tab"
+              role="tab"
+              id="tab-docker"
+              aria-controls="panel"
+              aria-selected="false"
+              data-service="docker"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M13.98 11.08h2.12v2.3h-2.12zM11.2 11.08h2.12v2.3H11.2zM8.42 11.08h2.12v2.3H8.42zM5.64 11.08h2.12v2.3H5.64zM8.42 8.35h2.12v2.3H8.42zM11.2 8.35h2.12v2.3H11.2zM8.42 5.62h2.12v2.3H8.42zM23.76 11.7c-.13-.1-.76-.57-2.19-.57-.4 0-.79.03-1.16.09-.28-1.94-1.89-2.88-1.96-2.92l-.4-.23-.26.39c-.32.51-.55 1.1-.66 1.71-.25 1.02-.1 1.98.42 2.8-.62.35-1.62.43-1.82.44H.94c-.26 0-.47.21-.48.47-.03 1.11.17 2.21.6 3.23.5 1.13 1.24 1.97 2.21 2.5 1.09.6 2.86.94 4.86.94 1.04 0 2.07-.09 3.07-.28 1.42-.26 2.78-.75 4.02-1.46 1.03-.59 1.95-1.34 2.73-2.21 1.3-1.46 2.07-3.09 2.64-4.2h.23c1.39 0 2.24-.56 2.71-1.02.31-.3.56-.67.71-1.08l.1-.3-.33-.25Z" />
+              </svg>
+              Docker
+            </button>
+            <button
+              class="tab"
+              role="tab"
+              id="tab-sourceforge"
+              aria-controls="panel"
+              aria-selected="false"
+              data-service="sourceforge"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 8v13H3V8" />
+                <path d="M1 3h22v5H1z" />
+                <path d="M10 12h4" />
+              </svg>
+              SourceForge
+            </button>
+          </div>
+
+          <div class="console-body" id="panel" role="tabpanel" aria-labelledby="tab-github">
+            <form class="field" id="proxy-form" autocomplete="off">
+              <label class="sr-only" for="url-input" id="url-label">要加速的链接</label>
+              <div class="input-shell">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" />
+                  <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />
+                </svg>
+                <input
+                  type="text"
+                  id="url-input"
+                  name="url"
+                  placeholder="https://github.com/user/repo/releases/download/v1.0/app.zip"
+                  spellcheck="false"
+                  autocapitalize="off"
+                  autocorrect="off"
+                  aria-describedby="url-hint"
+                />
+              </div>
+              <button class="btn" type="submit" id="convert-btn">
+                转换链接
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14" />
+                  <path d="m13 6 6 6-6 6" />
+                </svg>
+              </button>
+            </form>
+
+            <p id="url-hint" class="sr-only">
+              粘贴完整的 GitHub、Docker 镜像名或 SourceForge 链接，回车即可生成加速地址。
+            </p>
+
+            <div class="output" id="output" hidden>
+              <div class="output-head">
+                <span>加速后的链接</span>
+                <span class="spacer"></span>
+                <button class="btn btn-ghost btn-sm" type="button" id="copy-output">复制</button>
+                <a class="btn btn-ghost btn-sm" id="open-output" href="#" target="_blank" rel="noopener noreferrer">打开</a>
+              </div>
+              <a class="output-url" id="output-url" href="#" target="_blank" rel="noopener noreferrer"></a>
+              <div class="output-meta">
+                <span>节点 <b id="meta-node">—</b></span>
+                <span>类型 <b id="meta-kind">—</b></span>
+                <span>缓存 <b id="meta-cache">—</b></span>
+              </div>
+            </div>
+
+            <div class="nodes-row">
+              <span class="nodes-label">加速节点</span>
+              <div class="node-chips" id="node-chips" role="group" aria-label="选择加速节点"></div>
+            </div>
+          </div>
+
+          <div class="examples" id="examples">
+            <span>快捷示例：</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= SERVICES ================= -->
+      <section id="services">
+        <div class="wrap">
+          <div class="sec-head">
+            <span class="sec-eyebrow">Services</span>
+            <h2>三类资源，一个入口</h2>
+            <p>代码托管、容器镜像与开源软件分发，统一走同一条边缘加速链路。</p>
+          </div>
+
+          <div class="grid grid-3">
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2v13" />
+                  <path d="m6.5 9.5 5.5 5.5 5.5-5.5" />
+                  <path d="M5 21h14" />
+                </svg>
+              </div>
+              <h3>GitHub 文件加速</h3>
+              <p>
+                Releases 资产、Raw 原文、Archive 源码归档、Gist 与 codeload 全部覆盖。
+                流式转发不落盘，支持 Range 头部实现断点续传。
+              </p>
+            </article>
+
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                  <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                  <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                </svg>
+              </div>
+              <h3>Docker 镜像加速</h3>
+              <p>
+                对接 Docker Hub v2 registry，自动换取匿名 Bearer token，
+                manifest 与 blob 分层走边缘缓存，无需额外客户端。
+              </p>
+            </article>
+
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 8v13H3V8" />
+                  <path d="M1 3h22v5H1z" />
+                  <path d="M10 12h4" />
+                </svg>
+              </div>
+              <h3>SourceForge 加速</h3>
+              <p>
+                自动跟随 SourceForge 的 302 重定向，落到地理最近的原始镜像站，
+                老牌开源软件的安装包下载不再中断。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= NODES ================= -->
+      <section id="nodes">
+        <div class="wrap">
+          <div class="sec-head">
+            <span class="sec-eyebrow">Network</span>
+            <h2>加速节点</h2>
+            <p>
+              节点列表由服务端配置驱动，健康状态实时探测。任一路径异常时，
+              可在上方输入框下方直接切换线路。
+            </p>
+          </div>
+
+          <div class="node-table" id="node-table" aria-live="polite" aria-busy="true">
+            <div class="node-row">
+              <div class="node-id">
+                <span class="node-flag">—</span>
+                <span class="node-name">正在读取节点配置…</span>
+              </div>
+              <span class="node-region">—</span>
+              <span class="node-lat">—</span>
+              <span class="badge badge-wait">检测中</span>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: center; margin-top: 1.5rem">
+            <button class="btn btn-ghost btn-sm" type="button" id="refresh-nodes">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.6-6.4" />
+                <path d="M21 3v6h-6" />
+              </svg>
+              重新检测
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= USAGE ================= -->
+      <section id="usage">
+        <div class="wrap">
+          <div class="sec-head">
+            <span class="sec-eyebrow">Usage</span>
+            <h2>三种用法，按需选择</h2>
+            <p>网页转换、命令行直接拼接、或把 Docker 配成镜像加速器。</p>
+          </div>
+
+          <div class="steps">
+            <div class="step">
+              <span class="step-num">1</span>
+              <h3>网页转换</h3>
+              <p>把原始链接粘贴到上方输入框，点「转换链接」，复制生成的地址即可。</p>
+              <pre class="code"><button class="copy-btn" type="button" data-copy="https://mirror.137101.xyz/gh/">复制</button><code><span class="c-dim"># 原始</span>
+https://github.com/user/repo/releases/download/v1.0/app.zip
+
+<span class="c-dim"># 加速</span>
+<span class="c-cmd">https://mirror.137101.xyz/gh/https://github.com/</span>user/repo/releases/download/v1.0/app.zip</code></pre>
+            </div>
+
+            <div class="step">
+              <span class="step-num">2</span>
+              <h3>命令行下载</h3>
+              <p>直接在 <code style="font-family: var(--font-mono); font-size: 0.85em; color: #7dd3fc">curl</code>、<code style="font-family: var(--font-mono); font-size: 0.85em; color: #7dd3fc">wget</code> 或 aria2 前拼接前缀。</p>
+              <pre class="code"><button class="copy-btn" type="button" data-copy="curl -L -O https://mirror.137101.xyz/gh/https://github.com/user/repo/releases/download/v1.0/app.zip">复制</button><code><span class="c-cmd">curl</span> -L -O <span class="c-str">https://mirror.137101.xyz/gh/https://github.com/</span>\
+  user/repo/releases/download/v1.0/app.zip
+
+<span class="c-dim"># 断点续传</span>
+<span class="c-cmd">wget</span> -c <span class="c-str">https://mirror.137101.xyz/gh/…</span></code></pre>
+            </div>
+
+            <div class="step">
+              <span class="step-num">3</span>
+              <h3>Docker 镜像源</h3>
+              <p>写入 <code style="font-family: var(--font-mono); font-size: 0.85em; color: #7dd3fc">/etc/docker/daemon.json</code> 后重启 Docker。</p>
+              <pre class="code"><button class="copy-btn" type="button" data-copy='{"registry-mirrors":["https://mirror.137101.xyz"]}'>复制</button><code><span class="c-key">{</span>
+  <span class="c-key">"registry-mirrors"</span>: <span class="c-str">["https://mirror.137101.xyz"]</span>
+<span class="c-key">}</span>
+
+<span class="c-dim"># 重启生效</span>
+<span class="c-cmd">sudo systemctl restart docker</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= WHY ================= -->
+      <section id="why">
+        <div class="wrap">
+          <div class="sec-head">
+            <span class="sec-eyebrow">Why EdgeMirror</span>
+            <h2>为高频拉取场景设计</h2>
+            <p>面向 CI 流水线、容器构建与依赖安装，而不是偶尔的下载。</p>
+          </div>
+
+          <div class="grid grid-4">
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m13 2-9 12h7l-1 8 9-12h-7z" />
+                </svg>
+              </div>
+              <h3>边缘直连</h3>
+              <p>请求在 Cloudflare 全球 300+ 节点回源，不经过任何第三方中转，首字节延迟更低。</p>
+            </article>
+
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+              </div>
+              <h3>零数据截留</h3>
+              <p>纯流式转发，不落盘、不改写、不记录内容。HTTPS 端到端加密，仅白名单域名可被代理。</p>
+            </article>
+
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12h4l3 8 4-16 3 8h4" />
+                </svg>
+              </div>
+              <h3>断点续传</h3>
+              <p>Range 请求原样透传，aria2 多线程、IDM、curl -C 全部可用，大文件不再从头下载。</p>
+            </article>
+
+            <article class="card">
+              <div class="card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 8v4l3 2" />
+                </svg>
+              </div>
+              <h3>节点可切换</h3>
+              <p>多线路并行探测，任一节点异常可即时切换。节点清单在服务端配置，随时可替换。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= FAQ ================= -->
+      <section id="faq">
+        <div class="wrap">
+          <div class="sec-head">
+            <span class="sec-eyebrow">FAQ</span>
+            <h2>常见问题</h2>
+          </div>
+
+          <div class="faq">
+            <details>
+              <summary>EdgeMirror 是否免费？有流量限制吗？</summary>
+              <div class="faq-body">
+                <p>
+                  完全免费，无需注册，也没有人为的流量上限。站点运行在 Cloudflare Workers / Pages
+                  之上，静态资源请求不额外计费，因此在合理使用范围内可以长期免费提供。
+                </p>
+                <p>
+                  为避免被滥用为开放代理，只允许白名单内的 GitHub、Docker Hub 与 SourceForge
+                  域名通过，其他目标会被直接拒绝。
+                </p>
+              </div>
+            </details>
+
+            <details>
+              <summary>支持哪些 GitHub 资源类型？</summary>
+              <div class="faq-body">
+                <p>目前覆盖以下来源：</p>
+                <p>
+                  <code>github.com</code>（Releases 资产、archive 归档）·
+                  <code>raw.githubusercontent.com</code>（Raw 原文）·
+                  <code>codeload.github.com</code>（源码包）·
+                  <code>gist.githubusercontent.com</code>（Gist）·
+                  <code>api.github.com</code>（REST API）·
+                  Release 资产的重定向目标 <code>release-assets.githubusercontent.com</code>
+                </p>
+              </div>
+            </details>
+
+            <details>
+              <summary>Docker 镜像加速如何配置？</summary>
+              <div class="faq-body">
+                <p>
+                  编辑 <code>/etc/docker/daemon.json</code>，加入
+                  <code>"registry-mirrors": ["https://mirror.137101.xyz"]</code>，
+                  然后执行 <code>sudo systemctl restart docker</code>。
+                </p>
+                <p>
+                  之后 <code>docker pull nginx</code> 会自动走加速链路。也可以显式指定：
+                  <code>docker pull mirror.137101.xyz/library/nginx:latest</code>。
+                </p>
+              </div>
+            </details>
+
+            <details>
+              <summary>为什么某些链接转换后无法下载？</summary>
+              <div class="faq-body">
+                <p>常见原因有三类：</p>
+                <p>
+                  一是目标域名不在白名单内（例如私有 CDN 或个人网盘），会被代理拒绝；
+                  二是上游资源本身需要登录鉴权（私有仓库、私有 Release）；
+                  三是节点临时异常，此时可在输入框下方切换其他节点后重试。
+                </p>
+              </div>
+            </details>
+
+            <details>
+              <summary>节点挂了怎么办？</summary>
+              <div class="faq-body">
+                <p>
+                  页面顶部的状态灯与「节点状态」表格会实时探测各线路。若某条线路异常，
+                  它会显示为红色，此时在输入框下方选择其他节点即可。
+                </p>
+                <p>
+                  节点清单由服务端配置文件驱动，站长可以在不改变前端的情况下增删或替换线路，
+                  新的节点会在下次部署后自动出现在列表中。
+                </p>
+              </div>
+            </details>
+
+            <details>
+              <summary>加速链接支持 git clone 吗？</summary>
+              <div class="faq-body">
+                <p>
+                  支持。把仓库地址拼接为
+                  <code>git clone https://mirror.137101.xyz/gh/https://github.com/user/repo.git</code>
+                  即可。需要注意 clone 走的是 smart HTTP 协议，会发起多个子请求，
+                  若上游对 git 协议有限制则可能失败。
+                </p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <div class="footer-grid">
+          <div class="footer-brand">
+            <a class="brand" href="/">
+              <span class="brand-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3v12" />
+                  <path d="m7 10 5 5 5-5" />
+                  <path d="M5 21h14" />
+                </svg>
+              </span>
+              <span>EdgeMirror</span>
+              <span class="brand-tag">v1.0</span>
+            </a>
+            <p>
+              全球高速代码分发与开源镜像加速网关。部署于 Cloudflare 边缘网络，
+              免配置、即开即用、完全免费。
+            </p>
+          </div>
+
+          <div class="footer-col">
+            <h4>加速服务</h4>
+            <ul>
+              <li><a href="#services">GitHub 文件加速</a></li>
+              <li><a href="#services">Docker 镜像加速</a></li>
+              <li><a href="#services">SourceForge 加速</a></li>
+              <li><a href="#nodes">节点状态</a></li>
+            </ul>
+          </div>
+
+          <div class="footer-col">
+            <h4>资源</h4>
+            <ul>
+              <li><a href="#usage">使用方式</a></li>
+              <li><a href="#faq">常见问题</a></li>
+              <li><a href="/api/nodes">节点 API</a></li>
+              <li><a href="/api/health">健康检查 API</a></li>
+              <li>
+                <a href="https://github.com/CloudflareFree/edgemirror" rel="noopener noreferrer" target="_blank">源代码</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <span>© <span id="year">2026</span> EdgeMirror · 基于 Cloudflare 边缘网络构建</span>
+          <code>mirror.137101.xyz</code>
+        </div>
+      </div>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" data-show="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m5 12 4 4 10-10" />
+      </svg>
+      <span id="toast-text">已复制</span>
+    </div>
+
+    <script src="/assets/app.js" type="module"></script>
+  </body>
+</html>

@@ -1,5 +1,10 @@
 import { cleanResponseHeaders, corsHeaders, json } from "../_lib/proxy.js";
-import { enabledRegistries, activeRegistry } from "../_config/nodes.js";
+import {
+  pickRegistry,
+  noteRateLimited,
+  decodeToken,
+} from "../_lib/registry.js";
+import { activeRegistry, DOCKER_REGISTRIES } from "../_config/nodes.js";
 
 /**
  * Docker / OCI registry mirror.
@@ -25,52 +30,6 @@ const ACCEPT_MANIFEST = [
   "application/vnd.oci.image.manifest.v1+json",
   "application/vnd.docker.distribution.manifest.v2+json",
 ].join(", ");
-
-const PROBE_TIMEOUT_MS = 3500;
-const PROBE_TTL_MS = 60_000;
-
-/** Per-isolate cache: { id, at } of the last registry that answered /v2/. */
-let registryCache = null;
-
-async function pickRegistry() {
-  const all = enabledRegistries();
-  if (all.length === 1) return { reg: all[0], failures: [] };
-
-  if (registryCache && Date.now() - registryCache.at < PROBE_TTL_MS) {
-    const hit = all.find((r) => r.id === registryCache.id);
-    if (hit) return { reg: hit, failures: [] };
-  }
-
-  const failures = [];
-  for (const reg of all) {
-    try {
-      // GET, not HEAD: several registries answer 405 to HEAD on /v2/, which
-      // says nothing about whether they can serve pulls.
-      const res = await fetch(`${reg.registry}/v2/`, {
-        method: "GET",
-        headers: { "user-agent": "EdgeMirror/1.0" },
-        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      });
-      if (res.body) await res.body.cancel();
-      // Any 2xx/3xx/4xx means the endpoint answered; only 5xx or a thrown
-      // error count as "unreachable".
-      if (res.status < 500) {
-        registryCache = { id: reg.id, at: Date.now() };
-        return { reg, failures };
-      }
-      failures.push({ registry: reg.id, status: res.status });
-    } catch (err) {
-      failures.push({
-        registry: reg.id,
-        error: String((err && err.name) || err),
-      });
-    }
-  }
-
-  // Nothing answered — fall back to the configured primary so the caller
-  // gets a real error from the actual upstream rather than a guess.
-  return { reg: activeRegistry(), failures };
-}
 
 export const onRequestOptions = () =>
   new Response(null, { status: 204, headers: corsHeaders() });
@@ -98,17 +57,7 @@ async function handle(request) {
     });
   }
 
-  const { reg, failures } = await pickRegistry();
-
-  // Docker Hub wants the "library/" prefix for official images; other
-  // registries address them flat. Normalise per-registry.
-  let upstreamPath = path;
-  if (reg.namespace) {
-    const m = upstreamPath.match(/^\/v2\/([^/]+)\/(manifests|blobs)\/(.*)$/);
-    if (m && !m[1].includes("/")) {
-      upstreamPath = `/v2/${reg.namespace}/${m[1]}/${m[2]}/${m[3]}`;
-    }
-  }
+  const { reg: preferred, failures } = await pickRegistry();
 
   const headers = new Headers();
   for (const h of ["range", "if-none-match", "if-modified-since"]) {
@@ -116,28 +65,116 @@ async function handle(request) {
     if (v) headers.set(h, v);
   }
   headers.set("accept", request.headers.get("accept") || ACCEPT_MANIFEST);
-  const auth = request.headers.get("authorization");
-  if (auth) headers.set("authorization", auth);
   headers.set("user-agent", "EdgeMirror/1.0");
 
-  let res;
-  try {
-    res = await fetch(reg.registry + upstreamPath + url.search, {
-      method: request.method === "HEAD" ? "HEAD" : "GET",
-      headers,
-      redirect: "follow",
-    });
-  } catch (err) {
+  // A token is only valid for the registry that minted it, so route by the
+  // tag we embedded in it. Untagged (client-supplied) credentials follow the
+  // normal path unchanged.
+  const decoded = decodeToken(request.headers.get("authorization"));
+  const candidates = [];
+
+  if (decoded) {
+    // A tagged token is valid only at the registry that minted it. Sending
+    // it elsewhere yields 403, so there is nothing to fall through to: the
+    // client must re-request a token if this registry is throttled.
+    const owner = DOCKER_REGISTRIES.find(
+      (r) => r.id === decoded.registryId && r.enabled
+    );
+    if (owner) candidates.push(owner);
+    headers.set("authorization", `Bearer ${decoded.token}`);
+  } else {
+    const auth = request.headers.get("authorization");
+    if (auth) headers.set("authorization", auth);
+
+    // No tagged token: the client is anonymous or brought its own
+    // credentials, so any enabled registry can serve it. Docker Hub throttles
+    // anonymous pulls by source IP and Workers share Cloudflare's egress
+    // pool, so a 429 there is expected — falling through keeps pulls alive
+    // for images present in more than one registry.
+    for (const reg of [preferred, ...DOCKER_REGISTRIES.filter((r) => r.enabled)]) {
+      if (reg && !candidates.some((c) => c.id === reg.id)) candidates.push(reg);
+    }
+  }
+
+  let res = null;
+  let reg = preferred;
+  const attemptErrors = [];
+
+  for (const candidate of candidates) {
+    // Docker Hub wants the "library/" prefix for official images; other
+    // registries address them flat. Normalise per-registry.
+    let upstreamPath = path;
+    if (candidate.namespace) {
+      const m = upstreamPath.match(/^\/v2\/([^/]+)\/(manifests|blobs)\/(.*)$/);
+      if (m && !m[1].includes("/")) {
+        upstreamPath = `/v2/${candidate.namespace}/${m[1]}/${m[2]}/${m[3]}`;
+      }
+    }
+
+    try {
+      const attempt = await fetch(candidate.registry + upstreamPath + url.search, {
+        method: request.method === "HEAD" ? "HEAD" : "GET",
+        headers,
+        redirect: "follow",
+      });
+
+      if (attempt.status === 429) {
+        noteRateLimited(candidate.id);
+        attemptErrors.push({ registry: candidate.id, status: 429 });
+        if (attempt.body) await attempt.body.cancel();
+
+        // A tagged token cannot be replayed at another registry, so there is
+        // no useful fallback — surface the throttle honestly, with a hint
+        // that logged-in pulls are not affected.
+        if (decoded && candidates.length === 1) {
+          return new Response(
+            JSON.stringify({
+              errors: [
+                {
+                  code: "TOOMANYREQUESTS",
+                  message:
+                    "Docker Hub 匿名拉取限流（Cloudflare 出口 IP 共享）。" +
+                    "请稍后重试，或 docker login 后使用个人额度。",
+                },
+              ],
+            }),
+            {
+              status: 429,
+              headers: {
+                "content-type": "application/json",
+                "retry-after": "60",
+                "x-edge-mirror-node": `registry:${candidate.id}`,
+                ...corsHeaders(),
+              },
+            }
+          );
+        }
+        continue;
+      }
+
+      res = attempt;
+      reg = candidate;
+      break;
+    } catch (err) {
+      attemptErrors.push({
+        registry: candidate.id,
+        error: String((err && err.name) || err),
+      });
+    }
+  }
+
+  if (!res) {
     return json(
       {
         ok: false,
-        error: "registry_unreachable",
-        message: "上游镜像仓库连接失败，请稍后重试。",
-        detail: String((err && err.name) || err),
-        registry: reg.id,
+        error: "registry_unavailable",
+        message:
+          "上游镜像仓库暂时不可用（可能触发匿名拉取限流），请稍后重试，" +
+          "或在 Docker 中登录后使用官方源。",
+        attempts: attemptErrors,
         probeFailures: failures,
       },
-      { status: 502 }
+      { status: 503 }
     );
   }
 

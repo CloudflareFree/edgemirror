@@ -61,6 +61,24 @@ export const NODES = [
 `DOCKER_REGISTRIES` 同样在 `functions/_config/nodes.js`。默认优先 Docker Hub，
 连不上时自动回落到 GHCR——这就是本机 Docker Hub 被墙时站点仍能正常服务的原因。
 
+### Docker Hub 匿名限流（重要）
+
+Docker Hub 对**每个源 IP** 的匿名拉取有配额，而 Cloudflare Workers 的所有请求
+共用一组出口 IP —— 匿名配额基本永远是耗尽状态，会返回 `429 TOOMANYREQUESTS`。
+
+免费缓解办法：用任意免费 Docker Hub 账号提额。
+
+```bash
+npx wrangler pages secret put DOCKERHUB_USER   --project-name=edgemirror
+npx wrangler pages secret put DOCKERHUB_TOKEN  --project-name=edgemirror
+```
+
+`DOCKERHUB_TOKEN` 是 Docker Hub → Account Settings → Security → New Access Token
+生成的 Personal Access Token，不是登录密码。
+
+配置后 `/token` 会用该账号申请令牌，配额大幅提升。未配置时 GHCR 上的镜像
+（如 `ghcr.io/...`）仍然正常，只是 Docker Hub 官方镜像会受限。
+
 ## 本地开发
 
 ```bash

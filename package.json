@@ -8,10 +8,11 @@
     "deploy": "wrangler pages deploy public --project-name=edgemirror",
     "test": "node test/integration.mjs",
     "test:e2e": "node test/e2e.mjs",
-    "test:all": "node test/integration.mjs && node test/e2e.mjs"
+    "test:all": "node test/integration.mjs && node test/e2e.mjs",
+    "build": "echo 'EdgeMirror: static assets + Pages Functions, no build step required'"
   },
-  "devDependencies": {
+  "type": "module",
+  "optionalDependencies": {
     "wrangler": "^4.154.0"
-  },
-  "type": "module"
+  }
 }

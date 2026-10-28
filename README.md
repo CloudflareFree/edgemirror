@@ -101,14 +101,29 @@ E2E 用 CDP 驱动 headless Chrome，覆盖转换逻辑、节点切换、键盘�
 
 ## 部署
 
-项目连到 Cloudflare Pages，构建输出目录 `public`，函数目录 `functions`。
-每次 push 到 `main` 自动部署。
+Cloudflare Pages 已连接本仓库（`CloudflareFree/edgemirror`，分支 `main`）。
 
-手动部署：
+**每次 push 到 `main`，Cloudflare 自动拉取代码 → 构建 → 发布。** 不需要本地跑任何命令。
+
+| 设置 | 值 |
+|---|---|
+| 生产分支 | `main` |
+| 构建命令 | `npm run build`（空操作，纯静态资源） |
+| 输出目录 | `public` |
+| 函数目录 | `functions`（Pages Functions，自动识别） |
+| 预览部署 | 关闭（只为 `main` 构建） |
+
+`wrangler` 放在 `optionalDependencies`，Cloudflare 构建时不安装它，省掉几十 MB 下载。
+
+### 应急手动部署
+
+Git 触发失败时可以直接上传：
 
 ```bash
-npx wrangler pages deploy public --project-name=edgemirror
+npx wrangler pages deploy public --project-name=edgemirror --branch=main
 ```
+
+注意这会创建一个 **direct upload** 部署，不改变 Git 关联；下次 push 仍会正常触发自动构建。
 
 ## 项目结构
 

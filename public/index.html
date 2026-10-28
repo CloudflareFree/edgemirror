@@ -50,7 +50,7 @@
 
     <link rel="preload" href="/fonts/jetbrains-mono-latin.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="/assets/app.css" />
+    <link rel="stylesheet" href="/assets/app.css?v=2" />
 
     <script type="application/ld+json">
       {
@@ -177,7 +177,7 @@
       <div class="hero wrap">
         <div class="hero-badge">
           <strong>NEW</strong>
-          <span>多地域镜像节点 · 302 直达不经中转</span>
+          <span>多地域镜像节点 · 转换即直达，不经中转</span>
         </div>
 
         <h1>
@@ -321,7 +321,7 @@
               <h3>GitHub 文件加速</h3>
               <p>
                 Releases 资产、Raw 原文、Archive 源码归档、Gist 与 codeload 全部覆盖。
-                302 直达镜像节点，断点续传由镜像站原生支持。
+                转换结果直接是镜像地址，断点续传由镜像站原生支持。
               </p>
             </article>
 
@@ -409,22 +409,22 @@
               <span class="step-num">1</span>
               <h3>网页转换</h3>
               <p>把原始链接粘贴到上方输入框，点「转换链接」，复制生成的地址即可。</p>
-              <pre class="code"><button class="copy-btn" type="button" data-copy="https://mirror.137101.xyz/gh/">复制</button><code><span class="c-dim"># 原始</span>
+              <pre class="code"><button class="copy-btn" type="button" data-copy="https://gh-proxy.com/https://github.com/">复制</button><code><span class="c-dim"># 原始</span>
 https://github.com/user/repo/releases/download/v1.0/app.zip
 
 <span class="c-dim"># 加速</span>
-<span class="c-cmd">https://mirror.137101.xyz/gh/https://github.com/</span>user/repo/releases/download/v1.0/app.zip</code></pre>
+<span class="c-cmd">https://gh-proxy.com/https://github.com/</span>user/repo/releases/download/v1.0/app.zip</code></pre>
             </div>
 
             <div class="step">
               <span class="step-num">2</span>
               <h3>命令行下载</h3>
               <p>直接在 <code style="font-family: var(--font-mono); font-size: 0.85em; color: #7dd3fc">curl</code>、<code style="font-family: var(--font-mono); font-size: 0.85em; color: #7dd3fc">wget</code> 或 aria2 前拼接前缀。</p>
-              <pre class="code"><button class="copy-btn" type="button" data-copy="curl -L -O https://mirror.137101.xyz/gh/https://github.com/user/repo/releases/download/v1.0/app.zip">复制</button><code><span class="c-cmd">curl</span> -L -O <span class="c-str">https://mirror.137101.xyz/gh/https://github.com/</span>\
+              <pre class="code"><button class="copy-btn" type="button" data-copy="curl -L -O https://gh-proxy.com/https://github.com/user/repo/releases/download/v1.0/app.zip">复制</button><code><span class="c-cmd">curl</span> -L -O <span class="c-str">https://gh-proxy.com/https://github.com/</span>\
   user/repo/releases/download/v1.0/app.zip
 
 <span class="c-dim"># 断点续传</span>
-<span class="c-cmd">wget</span> -c <span class="c-str">https://mirror.137101.xyz/gh/…</span></code></pre>
+<span class="c-cmd">wget</span> -c <span class="c-str">https://gh-proxy.com/https://github.com/…</span></code></pre>
             </div>
 
             <div class="step">
@@ -458,8 +458,8 @@ https://github.com/user/repo/releases/download/v1.0/app.zip
                   <path d="m13 2-9 12h7l-1 8 9-12h-7z" />
                 </svg>
               </div>
-              <h3>302 直达</h3>
-              <p>本站只做一次重定向，实际字节由镜像节点直接交付给你，不经过中转，速度取决于离你最近的节点。</p>
+              <h3>转换即直达</h3>
+              <p>转换出来的就是镜像站地址，复制后直接由镜像节点交付，本站不在下载链路上，速度取决于离你最近的节点。</p>
             </article>
 
             <article class="card">
@@ -470,7 +470,7 @@ https://github.com/user/repo/releases/download/v1.0/app.zip
                 </svg>
               </div>
               <h3>零数据截留</h3>
-              <p>默认只做 302 重定向，本站不接触文件内容。仅白名单域名可被加速，不会被当作开放代理滥用。</p>
+              <p>生成的链接直接指向镜像站，本站既不接触也不记录文件内容。代理仅白名单域名可用，不会被当作开放代理滥用。</p>
             </article>
 
             <article class="card">
@@ -581,7 +581,7 @@ https://github.com/user/repo/releases/download/v1.0/app.zip
               <div class="faq-body">
                 <p>
                   支持。把仓库地址拼接为
-                  <code>git clone https://mirror.137101.xyz/gh/https://github.com/user/repo.git</code>
+                  <code>git clone https://gh-proxy.com/https://github.com/user/repo.git</code>
                   即可。需要注意 clone 走的是 smart HTTP 协议，会发起多个子请求，
                   若上游对 git 协议有限制则可能失败。
                 </p>
@@ -651,6 +651,6 @@ https://github.com/user/repo/releases/download/v1.0/app.zip
       <span id="toast-text">已复制</span>
     </div>
 
-    <script src="/assets/app.js" type="module"></script>
+    <script src="/assets/app.js?v=2" type="module"></script>
   </body>
 </html>

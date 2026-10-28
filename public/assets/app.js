@@ -106,6 +106,23 @@ function buildProxyUrl(service, raw, nodeId) {
     } catch {
       return null;
     }
+
+    // Redirect nodes answer with a mirror URL outright: the user goes
+    // straight to gh-proxy and this site is not in the path at all. Only
+    // the `direct` fallback needs our own /gh endpoint.
+    if (node?.mode === "redirect" && node.baseUrl) {
+      const base = node.baseUrl.endsWith("/") ? node.baseUrl : node.baseUrl + "/";
+      const url = base + target;
+      return {
+        url,
+        kind: "GitHub Asset",
+        cache: "镜像站直达",
+        command: `curl -L -O ${url}`,
+        node: node.id,
+        mode: "mirror",
+      };
+    }
+
     const url = `${origin}/gh/${u.host}${u.pathname}${u.search}`;
     return {
       url,
@@ -114,9 +131,8 @@ function buildProxyUrl(service, raw, nodeId) {
         ? "immutable · 1y"
         : "1h",
       command: `curl -L -O ${url}`,
-      node: node?.id || "ghproxy",
-      // 302 到镜像站，字节不经过本站
-      mode: node?.mode || "redirect",
+      node: node?.id || "direct",
+      mode: "direct",
     };
   }
 
@@ -129,6 +145,9 @@ function buildProxyUrl(service, raw, nodeId) {
     } catch {
       return null;
     }
+    // SourceForge has no third-party mirror in front of it, so this one
+    // still goes through our /sf endpoint — which itself only forwards
+    // SourceForge's own 302 to a download mirror, never the bytes.
     const url = `${origin}/sf/${u.host}${u.pathname}${u.search}`;
     return {
       url,
@@ -136,7 +155,6 @@ function buildProxyUrl(service, raw, nodeId) {
       cache: "24h",
       command: `wget -c ${url}`,
       node: node?.id || "direct",
-      // 透传 SourceForge 自己的镜像重定向
       mode: "redirect",
     };
   }
@@ -321,10 +339,7 @@ function showOutput(result) {
   if (open) open.href = result.url;
   $("#meta-node").textContent = result.node;
   $("#meta-kind").textContent = result.kind;
-  $("#meta-cache").textContent =
-    result.mode === "redirect"
-      ? `${result.cache} · 302 直达`
-      : result.cache;
+  $("#meta-cache").textContent = result.cache;
 }
 
 function hideOutput() {

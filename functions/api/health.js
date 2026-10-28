@@ -36,17 +36,35 @@ export async function onRequestGet(ctx) {
   const results = await Promise.all(
     targets.map(async (node) => {
       const started = Date.now();
-      const probe = new URL(PROBE_PATH, url.origin);
-      probe.searchParams.set("node", node.id);
-      probe.searchParams.set("_h", String(started));
+
+      // Probe the node's real endpoint. Redirect nodes resolve to the
+      // mirror URL the frontend hands the user, and we deliberately do NOT
+      // follow the redirect: following it would download the probe file
+      // from the mirror on every health check.
+      let probeUrl;
+      if (node.mode === "redirect" && node.baseUrl) {
+        const base = node.baseUrl.endsWith("/") ? node.baseUrl : node.baseUrl + "/";
+        probeUrl = base + "https://raw.githubusercontent.com/torvalds/linux/master/README";
+      } else {
+        const probe = new URL(PROBE_PATH, url.origin);
+        probe.searchParams.set("node", node.id);
+        probe.searchParams.set("_h", String(started));
+        probeUrl = probe.toString();
+      }
 
       try {
-        const res = await fetch(probe.toString(), {
+        const res = await fetch(probeUrl, {
           headers: { range: "bytes=0-0", "user-agent": "EdgeMirror-Health/1.0" },
+          redirect: "manual",
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
         const ms = Date.now() - started;
-        const up = res.status === 200 || res.status === 206;
+        // 200/206 = bytes available; 30x is fine for a redirecting node. A
+        // 404 means the mirror answered but cannot serve this file.
+        const up =
+          res.status === 200 ||
+          res.status === 206 ||
+          (res.status >= 300 && res.status < 400);
         // Drain so the runtime can reuse the connection.
         if (res.body) await res.body.cancel();
         return {

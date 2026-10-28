@@ -11,8 +11,12 @@
   Cache-Control: public, max-age=31536000, immutable
   Access-Control-Allow-Origin: *
 
+# Unversioned asset paths: revalidate every load. A 7-day TTL here shipped a
+# stale app.js to returning visitors after a deploy, which silently kept old
+# behaviour alive. Hashed/versioned assets can opt into long caching if the
+# build ever adds them.
 /assets/*
-  Cache-Control: public, max-age=604800
+  Cache-Control: public, max-age=0, must-revalidate
 
 /index.html
   Cache-Control: public, max-age=0, must-revalidate

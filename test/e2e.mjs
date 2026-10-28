@@ -170,16 +170,27 @@ const gh = await convert(
 );
 ok("github URL converts", !gh.hidden, gh.url);
 ok(
-  "github path = /gh/<host>/<path>",
-  gh.url.includes("/gh/github.com/astral-sh/uv/releases/download/"),
+  "github URL points straight at the mirror, not at us",
+  /^https:\/\/(gh-proxy\.com|ghproxy\.net|ghfast\.top)\//.test(gh.url),
   gh.url
 );
-ok("github marked immutable cache", gh.cache.includes("immutable"), gh.cache);
+ok(
+  "mirror URL keeps the original github URL intact",
+  gh.url.endsWith(
+    "https://github.com/astral-sh/uv/releases/download/0.5.11/uv.tar.gz"
+  ),
+  gh.url
+);
+ok("mirror conversion is labelled", gh.cache.includes("镜像站"), gh.cache);
 
 const raw = await convert(
   "https://raw.githubusercontent.com/torvalds/linux/master/README"
 );
-ok("raw URL keeps host", raw.url.includes("/gh/raw.githubusercontent.com/"), raw.url);
+ok(
+  "raw URL also goes straight to the mirror",
+  /^https:\/\/(gh-proxy\.com|ghproxy\.net|ghfast\.top)\//.test(raw.url),
+  raw.url
+);
 
 // Docker tab
 await evaluate(`document.querySelector('#tab-docker').click()`);

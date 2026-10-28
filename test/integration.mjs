@@ -67,6 +67,14 @@ async function testConfig() {
     data.nodes.map((n) => `${n.id}:${n.mode}`).join(" "));
   ok("default github node is a redirect mirror",
     data.nodes.find((n) => n.kind === "primary")?.mode === "redirect");
+  ok("redirect nodes expose a mirror base URL",
+    data.nodes
+      .filter((n) => n.mode === "redirect")
+      .every((n) => /^https:\/\//.test(n.baseUrl || "")),
+    data.nodes
+      .filter((n) => n.mode === "redirect")
+      .map((n) => n.baseUrl)
+      .join(" "));
 
   const primary = data.nodes.find((n) => n.kind === "primary");
   ok("a primary node exists", Boolean(primary), primary?.id);

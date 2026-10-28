@@ -26,6 +26,10 @@ export async function onRequestGet() {
       flag: n.flag,
       kind: n.kind,
       mode: n.mode,
+      // The frontend builds mirror URLs client-side for redirect nodes, so
+      // the base has to be public. It is already visible to anyone who
+      // follows a 302 anyway.
+      baseUrl: n.baseUrl || null,
       services: n.services,
       note: n.note,
     })),

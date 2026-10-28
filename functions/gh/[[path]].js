@@ -2,6 +2,7 @@ import { pickNode } from "../_config/nodes.js";
 import {
   json,
   forward,
+  redirectTo,
   parseTarget,
   cachePolicyFor,
   corsHeaders,
@@ -68,6 +69,12 @@ export async function onRequestGet(ctx) {
       { ok: false, error: "no_node_available", message: "当前没有可用节点。" },
       { status: 503 }
     );
+  }
+
+  // Redirect nodes cost no egress: the client fetches from the mirror
+  // directly. Only `direct` nodes stream bytes through this Worker.
+  if (node.mode === "redirect") {
+    return redirectTo(node, target.toString(), ctx.request);
   }
 
   return forward(ctx.request, target.toString(), {

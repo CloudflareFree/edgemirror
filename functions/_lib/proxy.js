@@ -133,6 +133,33 @@ export function resolveTarget(node, originalUrl) {
 }
 
 /**
+ * 302 the client straight to a mirror.
+ *
+ * This is the cheap path by design: the Worker emits one redirect and never
+ * touches the bytes, so a 15 GB release costs nothing in Workers egress. The
+ * mirror serves the payload from its own infrastructure.
+ */
+export function redirectTo(node, originalUrl, request) {
+  const base = node.baseUrl.endsWith("/") ? node.baseUrl : node.baseUrl + "/";
+  const location = base + originalUrl;
+
+  // Preserve Range semantics: the browser/downloader follows the redirect
+  // and sends Range to the mirror itself, so no header rewriting is needed.
+  const headers = {
+    location,
+    ...CORS,
+    "cache-control": "public, max-age=300",
+    "x-edge-mirror-node": node.id,
+    "x-edge-mirror-mode": "redirect",
+  };
+
+  if (request && request.method === "HEAD") {
+    return new Response(null, { status: 302, headers });
+  }
+  return new Response(null, { status: 302, headers });
+}
+
+/**
  * Stream a response from `targetUrl` back to the caller.
  */
 export async function forward(request, targetUrl, opts = {}) {
@@ -213,8 +240,14 @@ export async function forward(request, targetUrl, opts = {}) {
     if (loc) outHeaders["location"] = loc;
   }
 
+  // A 3xx we chose not to follow is handed to the client as-is; forwarding
+  // its body would stream the mirror's own error page through us for no gain.
+  const isRedirect = upstream.status >= 300 && upstream.status < 400;
   const noBody =
-    method === "HEAD" || upstream.status === 204 || upstream.status === 304;
+    method === "HEAD" ||
+    isRedirect ||
+    upstream.status === 204 ||
+    upstream.status === 304;
 
   // --- ranged responses over compressible text -----------------------------
   //

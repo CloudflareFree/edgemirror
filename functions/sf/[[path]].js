@@ -65,11 +65,12 @@ export async function onRequestGet(ctx) {
     );
   }
 
-  // SourceForge answers 302 -> geo-nearest dl mirror. Follow it so the user
-  // receives bytes instead of a redirect to a host they may not reach.
+  // SourceForge already answers 302 -> geo-nearest mirror. Pass that redirect
+  // straight through instead of following it: the client downloads from the
+  // mirror directly, so no payload bytes cross this Worker.
   return forward(ctx.request, parsed.url, {
     node: null,
-    redirect: "follow",
+    redirect: "manual",
   });
 }
 

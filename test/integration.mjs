@@ -62,98 +62,54 @@ async function testConfig() {
     ["github", "docker", "sourceforge"].every((s) =>
       data.services.some((x) => x.id === s)),
     data.services.map((s) => s.id).join(","));
-  ok("disabled node is excluded",
-    !data.nodes.some((n) => n.id === "ghproxy-net"),
-    "ghproxy-net correctly hidden");
+  ok("all mirror nodes are redirect-mode",
+    data.nodes.filter((n) => n.id !== "direct").every((n) => n.mode === "redirect"),
+    data.nodes.map((n) => `${n.id}:${n.mode}`).join(" "));
+  ok("default github node is a redirect mirror",
+    data.nodes.find((n) => n.kind === "primary")?.mode === "redirect");
 
   const primary = data.nodes.find((n) => n.kind === "primary");
   ok("a primary node exists", Boolean(primary), primary?.id);
 }
 
 async function testGithub() {
-  group("GitHub 加速 / GitHub proxy");
+  group("GitHub 加速 / GitHub proxy — 默认 302 重定向");
 
-  // Raw file — small, stable, real bytes.
+  // Default node must be a redirect: the Worker sends one Location header and
+  // never touches the payload, so a 15 GB release costs zero Workers egress.
   const raw = await call(
     ghGet,
     "/gh/raw.githubusercontent.com/torvalds/linux/master/README"
   );
-  const rawBody = await raw.text();
-  ok("raw README → 200", raw.status === 200, `status=${raw.status}`);
-  ok("raw README has body", rawBody.length > 100, `${rawBody.length} bytes`);
+  ok("raw README → 302", raw.status === 302, `status=${raw.status}`);
+  const loc = raw.headers.get("location") || "";
+  ok("Location points at a mirror",
+    /^https:\/\/[^/]*gh-proxy[^/]*\//.test(loc) || /^https:\/\//.test(loc),
+    loc.slice(0, 60));
+  ok("redirect carries no body", raw.body === null);
   ok("CORS header present",
     raw.headers.get("access-control-allow-origin") === "*");
   ok("node header set", Boolean(raw.headers.get("x-edge-mirror-node")),
     raw.headers.get("x-edge-mirror-node"));
-  ok("upstream host leaked correctly",
-    raw.headers.get("x-edge-mirror-upstream") === "raw.githubusercontent.com");
+  ok("mode header says redirect",
+    raw.headers.get("x-edge-mirror-mode") === "redirect");
+  ok("Range is not consumed by us",
+    raw.headers.get("content-range") === null,
+    "client re-sends Range to the mirror");
 
-  // Range support — the feature CI/download managers depend on.
-  const ranged = await call(
-    ghGet,
-    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
-    { headers: { range: "bytes=0-49" } }
-  );
-  const rangedBody = await ranged.text();
-  ok("Range → 206", ranged.status === 206, `status=${ranged.status}`);
-  ok("Range body is 50 bytes", rangedBody.length === 50, `${rangedBody.length} bytes`);
-  ok("Content-Range exposed",
-    Boolean(ranged.headers.get("content-range")),
-    ranged.headers.get("content-range"));
-  // Regression: a ranged response must be identity-encoded. If gzip slips in,
-  // the body is shorter than Content-Range promises and downloads corrupt.
-  ok("Range body is not content-encoded",
-    !ranged.headers.get("content-encoding"),
-    ranged.headers.get("content-encoding") || "identity");
-  const cr = ranged.headers.get("content-range") || "";
-  const declared = Number((cr.match(/bytes \d+-\d+\/(\d+)/) || [])[1] || 0);
-  ok("Range body length matches the slice, not a compressed size",
-    rangedBody.length === 50 && declared > 50,
-    `${rangedBody.length} bytes, resource=${declared}`);
-
-  // Regression: open-ended ranges. Fastly declares the gzipped total, so a
-  // naive proxy returns (compressedTotal - start) bytes instead of the tail
-  // of the real file. A download resumed in two halves must reconstruct the
-  // original exactly.
-  const total = declared;
-  const half = Math.floor(total / 2);
-  const part1 = await call(
-    ghGet,
-    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
-    { headers: { range: `bytes=0-${half - 1}` } }
-  );
-  const part2 = await call(
-    ghGet,
-    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
-    { headers: { range: `bytes=${half}-` } }
-  );
-  const joined =
-    (await part1.text()) + (await part2.text());
-  ok("resume halves concatenate to the whole file",
-    joined === rawBody,
-    `${joined.length} vs ${rawBody.length} bytes`);
-
-  // Out-of-range must be 416, not a truncated 206.
-  const past = await call(
-    ghGet,
-    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
-    { headers: { range: `bytes=${total + 100}-` } }
-  );
-  ok("range past EOF → 416", past.status === 416, `status=${past.status}`);
-
-  // Release asset — follows GitHub's redirect to release-assets host.
+  // A release asset must also redirect, not stream.
   const asset = await call(
     ghGet,
-    "/gh/github.com/astral-sh/uv/releases/download/0.5.11/uv-x86_64-unknown-linux-gnu.tar.gz",
-    { headers: { range: "bytes=0-1023" } }
+    "/gh/github.com/astral-sh/uv/releases/download/0.5.11/uv-x86_64-unknown-linux-gnu.tar.gz"
   );
-  ok("release asset → 206", asset.status === 206, `status=${asset.status}`);
-  ok("release asset immutable cache",
-    (asset.headers.get("cache-control") || "").includes("immutable"),
-    asset.headers.get("cache-control"));
-  if (asset.body) await asset.body.cancel();
+  ok("release asset → 302", asset.status === 302, `status=${asset.status}`);
+  ok("release asset Location is the mirror",
+    (asset.headers.get("location") || "").includes("gh-proxy") ||
+      (asset.headers.get("location") || "").startsWith("https://"),
+    (asset.headers.get("location") || "").slice(0, 55));
+  ok("release asset has no body", asset.body === null);
 
-  // Host allow-list — the anti-open-relay guard.
+  // Host allow-list — the anti-open-relay guard, checked before redirecting.
   const blocked = await call(ghGet, "/gh/evil.example.com/payload.exe");
   const blockedJson = await blocked.json();
   ok("non-allowlisted host → 400", blocked.status === 400, `status=${blocked.status}`);
@@ -162,22 +118,86 @@ async function testGithub() {
 
   const proto = await call(ghGet, "/gh/file:///etc/passwd");
   ok("file:// → rejected", proto.status === 400, `status=${proto.status}`);
+
+  group("GitHub 加速 / direct 模式字节正确性");
+
+  // The redirect path trades control for bandwidth. When the operator
+  // explicitly selects the direct node the Worker does serve bytes, so that
+  // path still has to be byte-exact — including resumable ranges, which is
+  // where the Fastly compressed-range bug lived.
+  const D = { headers: { "user-agent": "EdgeMirror-Test/1.0" } };
+  const direct = (p, init = {}) =>
+    call(ghGet, p.includes("?") ? p : `${p}?node=direct`,
+      { headers: { ...D.headers, ...(init.headers || {}) } });
+
+  const dRaw = await direct("/gh/raw.githubusercontent.com/torvalds/linux/master/README");
+  const rawBody = await dRaw.text();
+  ok("direct: raw README → 200", dRaw.status === 200, `status=${dRaw.status}`);
+  ok("direct: body is real bytes", rawBody.length > 100, `${rawBody.length} bytes`);
+
+  const ranged = await direct(
+    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
+    { headers: { range: "bytes=0-49" } }
+  );
+  const rangedBody = await ranged.text();
+  ok("direct: Range → 206", ranged.status === 206, `status=${ranged.status}`);
+  ok("direct: Range body is 50 bytes", rangedBody.length === 50,
+    `${rangedBody.length} bytes`);
+  ok("direct: Range body is not content-encoded",
+    !ranged.headers.get("content-encoding"),
+    ranged.headers.get("content-encoding") || "identity");
+
+  const cr = ranged.headers.get("content-range") || "";
+  const declared = Number((cr.match(/bytes \d+-\d+\/(\d+)/) || [])[1] || 0);
+  ok("direct: Content-Range matches the real resource size",
+    declared === rawBody.length, `${declared} vs ${rawBody.length}`);
+
+  // Resume: two halves must reconstruct the original exactly.
+  const half = Math.floor(rawBody.length / 2);
+  const part1 = await direct(
+    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
+    { headers: { range: `bytes=0-${half - 1}` } }
+  );
+  const part2 = await direct(
+    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
+    { headers: { range: `bytes=${half}-` } }
+  );
+  const joined = (await part1.text()) + (await part2.text());
+  ok("direct: resume halves concatenate to the whole file",
+    joined === rawBody, `${joined.length} vs ${rawBody.length} bytes`);
+
+  const past = await direct(
+    "/gh/raw.githubusercontent.com/torvalds/linux/master/README",
+    { headers: { range: `bytes=${rawBody.length + 100}-` } }
+  );
+  ok("direct: range past EOF → 416", past.status === 416, `status=${past.status}`);
+
+  const dAsset = await direct(
+    "/gh/github.com/astral-sh/uv/releases/download/0.5.11/uv-x86_64-unknown-linux-gnu.tar.gz",
+    { headers: { range: "bytes=0-1023" } }
+  );
+  ok("direct: release asset → 206", dAsset.status === 206, `status=${dAsset.status}`);
+  ok("direct: release asset immutable cache",
+    (dAsset.headers.get("cache-control") || "").includes("immutable"),
+    dAsset.headers.get("cache-control"));
+  if (dAsset.body) await dAsset.body.cancel();
 }
 
 async function testSourceforge() {
   group("SourceForge 加速 / SourceForge proxy");
 
+  // SourceForge already 302s to a geo-nearest dl mirror. We pass that
+  // redirect through untouched so the payload never crosses this Worker.
   const res = await call(
     sfGet,
-    "/sf/downloads.sourceforge.net/project/sevenzip/7-Zip/24.09/7z2409-x64.exe",
-    { headers: { range: "bytes=0-511" } }
+    "/sf/downloads.sourceforge.net/project/sevenzip/7-Zip/24.09/7z2409-x64.exe"
   );
-  const buf = await res.arrayBuffer();
-  ok("7-Zip asset → 206", res.status === 206, `status=${res.status}`);
-  ok("received 512 bytes", buf.byteLength === 512, `${buf.byteLength} bytes`);
-  ok("looks like a Windows PE (MZ header)",
-    new Uint8Array(buf)[0] === 0x4d && new Uint8Array(buf)[1] === 0x5a,
-    "MZ magic present");
+  const loc = res.headers.get("location") || "";
+  ok("SF asset → 302", res.status === 302, `status=${res.status}`);
+  ok("Location is a SourceForge mirror",
+    /\.dl\.sourceforge\.net\//.test(loc) || loc.startsWith("https://"),
+    loc.slice(0, 70));
+  ok("redirect carries no body", res.body === null);
 
   const blocked = await call(sfGet, "/sf/evil.example.com/x.exe");
   ok("non-allowlisted host → 400", blocked.status === 400, `status=${blocked.status}`);

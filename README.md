@@ -32,8 +32,10 @@ export const NODES = [
     flag: "CF",            // 图标角标（2 个字母）
     kind: "primary",       // primary = 默认节点，fallback = 备用
     enabled: true,         // ← 节点挂了就改成 false
-    mode: "direct",        // direct = 边缘直接回源
-    baseUrl: null,         // upstream 模式下填镜像地址
+    mode: "redirect",      // redirect = 302 到镜像站，字节不经过本站（推荐）
+                           // direct   = 边缘直接回源，消耗 Workers 流量
+                           // upstream = 本站转发镜像站内容，也消耗流量
+    baseUrl: "https://gh-proxy.com/",  // redirect/upstream 模式下填镜像地址
     services: ["github", "docker", "sourceforge"],  // 这个节点能承载哪些服务
   },
   {

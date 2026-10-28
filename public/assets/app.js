@@ -106,10 +106,7 @@ function buildProxyUrl(service, raw, nodeId) {
     } catch {
       return null;
     }
-    const isSrc = /^https?:\/\//i.test(value);
-    const url = isSrc
-      ? `${origin}/gh/${u.host}${u.pathname}${u.search}`
-      : `${origin}/gh/${target}`;
+    const url = `${origin}/gh/${u.host}${u.pathname}${u.search}`;
     return {
       url,
       kind: "GitHub Asset",
@@ -117,7 +114,9 @@ function buildProxyUrl(service, raw, nodeId) {
         ? "immutable · 1y"
         : "1h",
       command: `curl -L -O ${url}`,
-      node: node?.id || "direct",
+      node: node?.id || "ghproxy",
+      // 302 到镜像站，字节不经过本站
+      mode: node?.mode || "redirect",
     };
   }
 
@@ -136,7 +135,9 @@ function buildProxyUrl(service, raw, nodeId) {
       kind: "SourceForge File",
       cache: "24h",
       command: `wget -c ${url}`,
-      node: node?.id || "edge-sf",
+      node: node?.id || "direct",
+      // 透传 SourceForge 自己的镜像重定向
+      mode: "redirect",
     };
   }
   return null;
@@ -320,7 +321,10 @@ function showOutput(result) {
   if (open) open.href = result.url;
   $("#meta-node").textContent = result.node;
   $("#meta-kind").textContent = result.kind;
-  $("#meta-cache").textContent = result.cache;
+  $("#meta-cache").textContent =
+    result.mode === "redirect"
+      ? `${result.cache} · 302 直达`
+      : result.cache;
 }
 
 function hideOutput() {

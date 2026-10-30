@@ -20,7 +20,7 @@
 
 /index.html
   Cache-Control: public, max-age=0, must-revalidate
-  Link: </assets/app.css>; rel=preload; as=style
+  Link: </assets/app.css?v=3>; rel=preload; as=style
 
 /api/*
   Cache-Control: no-store
